@@ -526,3 +526,40 @@
     (ok claim-id)
   )
 )
+
+(define-public (create-referral-code (code (string-ascii 20)))
+  (begin
+    (asserts! (is-none (map-get? referral-codes { code: code })) ERR_DUPLICATE_ORDER_ID)
+    
+    (map-set referral-codes
+      { code: code }
+      {
+        referrer: tx-sender,
+        total-referrals: u0,
+        total-volume: u0,
+        commission-earned: u0,
+        is-active: true
+      }
+    )
+    (ok true)
+  )
+)
+
+(define-public (use-referral-code (code (string-ascii 20)))
+  (let (
+    (referral-data (unwrap! (map-get? referral-codes { code: code }) ERR_REFERRAL_NOT_FOUND))
+  )
+    (asserts! (get is-active referral-data) ERR_INVALID_PARAMETER)
+    
+    (map-set user-referrals
+      { user: tx-sender }
+      {
+        referrer: (some (get referrer referral-data)),
+        referred-users: u0,
+        referral-rewards: u0,
+        discount-tier: u1
+      }
+    )
+    (ok true)
+  )
+)
