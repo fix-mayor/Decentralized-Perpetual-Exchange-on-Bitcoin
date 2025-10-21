@@ -394,3 +394,172 @@
     timestamp: uint
   }
 )
+
+;; PORTFOLIO ANALYTICS
+(define-map portfolio-metrics
+  { user: principal, period: uint } ;; period in days
+  {
+    total-pnl: int,
+    win-rate: uint,
+    sharpe-ratio: int,
+    max-drawdown: uint,
+    total-trades: uint,
+    avg-holding-period: uint,
+    risk-adjusted-return: int
+  }
+)
+
+;; SOCIAL FEATURES
+(define-map trader-profiles
+  { trader: principal }
+  {
+    display-name: (string-ascii 50),
+    reputation-score: uint,
+    followers: uint,
+    following: uint,
+    public-stats: bool,
+    verified: bool
+  }
+)
+
+(define-map copy-trading
+  { follower: principal, leader: principal }
+  {
+    allocation-percentage: uint,
+    max-position-size: uint,
+    copy-settings: (buff 50),
+    performance: int,
+    start-timestamp: uint
+  }
+)
+
+;; RISK MANAGEMENT ENHANCEMENTS
+(define-map risk-parameters
+  { market-id: uint }
+  {
+    position-limit: uint,
+    concentration-limit: uint,
+    volatility-threshold: uint,
+    correlation-limits: (list 10 uint),
+    stress-test-scenarios: (list 5 uint)
+  }
+)
+
+;; Data variables for counters
+(define-data-var proposal-counter uint u0)
+(define-data-var vault-counter uint u0)
+(define-data-var claim-counter uint u0)
+
+(define-private (calculate-tier (staked-amount uint))
+  (if (>= staked-amount u10000000000) ;; 100 STX
+    TIER_PLATINUM
+    (if (>= staked-amount u5000000000) ;; 50 STX
+      TIER_GOLD
+      (if (>= staked-amount u1000000000) ;; 10 STX
+        TIER_SILVER
+        TIER_BRONZE
+      )
+    )
+  )
+)
+
+(define-private (update-liquidity-rewards (market-id uint) (provider principal))
+  (let (
+    (reward-pool (unwrap! (map-get? reward-pools { market-id: market-id }) (ok true)))
+    (provider-data (unwrap! (map-get? liquidity-providers { provider: provider, market-id: market-id }) (ok true)))
+  )
+    ;; Calculate pending rewards
+    (let (
+      (pending-rewards (* (get staked-amount provider-data) (get accumulated-reward-per-share reward-pool)))
+    )
+      (map-set liquidity-providers
+        { provider: provider, market-id: market-id }
+        (merge provider-data {
+          accumulated-rewards: (+ (get accumulated-rewards provider-data) pending-rewards),
+          reward-debt: pending-rewards
+        })
+      )
+      (ok true)
+    )
+  )
+)
+
+(define-public (contribute-to-insurance (market-id uint) (amount uint))
+  (let (
+    (current-fund (default-to 
+      { balance: u0, contribution-rate: u10, deficit-coverage: u0, last-updated: u0 }
+      (map-get? insurance-fund { market-id: market-id })
+    ))
+  )
+    (asserts! (> amount u0) ERR_INVALID_PARAMETER)
+    
+    (map-set insurance-fund
+      { market-id: market-id }
+      (merge current-fund {
+        balance: (+ (get balance current-fund) amount),
+        last-updated: stacks-block-height
+      })
+    )
+    (ok true)
+  )
+)
+
+(define-public (claim-insurance (market-id uint) (amount uint) (reason (string-ascii 50)))
+  (let (
+    (claim-id (var-get claim-counter))
+    (fund (unwrap! (map-get? insurance-fund { market-id: market-id }) ERR_ORACLE_NOT_FOUND))
+  )
+    (asserts! (>= (get balance fund) amount) ERR_INSURANCE_FUND_INSUFFICIENT)
+    
+    (map-set insurance-claims
+      { claim-id: claim-id }
+      {
+        market-id: market-id,
+        trader: tx-sender,
+        amount: amount,
+        reason: reason,
+        status: u0,
+        timestamp: stacks-block-height
+      }
+    )
+    (var-set claim-counter (+ claim-id u1))
+    (ok claim-id)
+  )
+)
+
+(define-public (create-referral-code (code (string-ascii 20)))
+  (begin
+    (asserts! (is-none (map-get? referral-codes { code: code })) ERR_DUPLICATE_ORDER_ID)
+    
+    (map-set referral-codes
+      { code: code }
+      {
+        referrer: tx-sender,
+        total-referrals: u0,
+        total-volume: u0,
+        commission-earned: u0,
+        is-active: true
+      }
+    )
+    (ok true)
+  )
+)
+
+(define-public (use-referral-code (code (string-ascii 20)))
+  (let (
+    (referral-data (unwrap! (map-get? referral-codes { code: code }) ERR_REFERRAL_NOT_FOUND))
+  )
+    (asserts! (get is-active referral-data) ERR_INVALID_PARAMETER)
+    
+    (map-set user-referrals
+      { user: tx-sender }
+      {
+        referrer: (some (get referrer referral-data)),
+        referred-users: u0,
+        referral-rewards: u0,
+        discount-tier: u1
+      }
+    )
+    (ok true)
+  )
+)
