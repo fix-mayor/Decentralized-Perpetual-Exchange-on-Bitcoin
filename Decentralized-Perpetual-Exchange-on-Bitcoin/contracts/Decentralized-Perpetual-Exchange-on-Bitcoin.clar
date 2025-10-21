@@ -224,3 +224,72 @@
     (ok true)
   )
 )
+
+;; Additional constants for new features
+(define-constant ERR_REWARD_POOL_EMPTY (err u119))
+(define-constant ERR_INSURANCE_FUND_INSUFFICIENT (err u120))
+(define-constant ERR_REFERRAL_NOT_FOUND (err u121))
+(define-constant ERR_VAULT_NOT_FOUND (err u122))
+(define-constant ERR_STRATEGY_NOT_APPROVED (err u123))
+(define-constant ERR_GOVERNANCE_PROPOSAL_NOT_FOUND (err u124))
+(define-constant ERR_STAKING_PERIOD_NOT_EXPIRED (err u125))
+(define-constant ERR_CROSS_MARGIN_INSUFFICIENT (err u126))
+
+;; Staking reward tiers
+(define-constant TIER_BRONZE u1)
+(define-constant TIER_SILVER u2)
+(define-constant TIER_GOLD u3)
+(define-constant TIER_PLATINUM u4)
+
+;; Governance proposal types
+(define-constant PROPOSAL_PARAMETER_CHANGE u1)
+(define-constant PROPOSAL_MARKET_ADDITION u2)
+(define-constant PROPOSAL_FEE_STRUCTURE u3)
+(define-constant PROPOSAL_EMERGENCY_PAUSE u4)
+
+;; LIQUIDITY MINING & REWARDS SYSTEM
+(define-map liquidity-providers
+  { provider: principal, market-id: uint }
+  {
+    staked-amount: uint,
+    reward-debt: uint,
+    accumulated-rewards: uint,
+    staking-timestamp: uint,
+    lock-period: uint,
+    tier: uint
+  }
+)
+
+(define-map reward-pools
+  { market-id: uint }
+  {
+    total-staked: uint,
+    reward-per-block: uint,
+    accumulated-reward-per-share: uint,
+    last-reward-block: uint,
+    total-rewards-distributed: uint
+  }
+)
+
+;; INSURANCE FUND SYSTEM
+(define-map insurance-fund
+  { market-id: uint }
+  {
+    balance: uint,
+    contribution-rate: uint, ;; Percentage of trading fees that go to insurance
+    deficit-coverage: uint,
+    last-updated: uint
+  }
+)
+
+(define-map insurance-claims
+  { claim-id: uint }
+  {
+    market-id: uint,
+    trader: principal,
+    amount: uint,
+    reason: (string-ascii 50),
+    status: uint, ;; 0: pending, 1: approved, 2: rejected
+    timestamp: uint
+  }
+)
