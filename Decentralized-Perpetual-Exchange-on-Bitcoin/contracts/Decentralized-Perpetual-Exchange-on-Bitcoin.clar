@@ -115,3 +115,112 @@
     total-funding-paid: int
   }
 )
+
+;; Trading volume tracking
+(define-map trading-volumes
+  { market-id: uint, trader: principal, period: uint } ;; period: 0 = daily, 1 = weekly, 2 = monthly
+  {
+    volume: uint,
+    timestamp: uint
+  }
+)
+
+;; Funding rate history
+(define-map funding-history
+  { market-id: uint, timestamp: uint }
+  {
+    funding-rate: int,
+    premium-index: int
+  }
+)
+
+;; Event counters for pagination
+(define-data-var trade-counter uint u0)
+(define-data-var liquidation-counter uint u0)
+(define-data-var funding-counter uint u0)
+
+;; Add or update an oracle price feed
+(define-public (set-oracle-price-feed
+                (oracle-id (buff 32))
+                (source (string-ascii 32))
+                (heartbeat uint)
+                (providers (list 10 principal)))
+  (begin
+    (asserts! (is-eq tx-sender CONTRACT_OWNER) ERR_NOT_AUTHORIZED)
+    
+    (map-set oracle-price-feeds
+      { oracle-id: oracle-id }
+      {
+        price: u0,
+        timestamp: u0,
+        source: source,
+        heartbeat: heartbeat,
+        providers: providers
+      }
+    )
+    (ok true)
+  )
+)
+
+;; Read-only function to get current price from oracle
+(define-read-only (get-oracle-price (oracle-id (buff 32)))
+  (let (
+    (oracle-data (unwrap! (map-get? oracle-price-feeds { oracle-id: oracle-id }) ERR_ORACLE_NOT_FOUND))
+    (current-time stacks-block-height)
+  )
+    ;; Check if price is stale
+    (asserts! (<= (- current-time (get timestamp oracle-data)) (get heartbeat oracle-data)) ERR_INVALID_ORACLE_DATA)
+    (ok (get price oracle-data))
+  )
+)
+
+;; Update markets that use a specific oracle
+(define-private (update-markets-with-oracle (oracle-id (buff 32)) (price uint))
+  (begin
+    ;; This would iterate through markets in a real implementation
+    ;; For Clarity, we would need a different approach like indexing or event tracking
+    ;; Simplified implementation for demonstration
+    (ok true)
+  )
+)
+
+;; Get cumulative funding for a market since inception
+(define-read-only (get-cumulative-funding (market-id uint))
+  ;; In production, this would calculate based on funding rate history
+  ;; Simplified version for demonstration
+  (let (
+    (market (unwrap! (map-get? markets { market-id: market-id }) (to-int u0)))
+    (current-funding-rate (get funding-rate market))
+  )
+    current-funding-rate ;; Simplified - should accumulate historical rates
+  )
+)
+
+;; Create a new position
+(define-private (create-new-position
+                (market-id uint)
+                (trader principal)
+                (size int)
+                (collateral uint)
+                (entry-price uint)
+                (liquidation-price uint)
+                (leverage uint)
+                (margin-ratio uint))
+  (begin
+    (map-set positions
+      { market-id: market-id, trader: trader }
+      {
+        size: size,
+        collateral: collateral,
+        entry-price: entry-price,
+        last-cumulative-funding: (get-cumulative-funding market-id),
+        liquidation-price: liquidation-price,
+        last-updated-block: stacks-block-height,
+        realized-pnl: 0,
+        leverage: leverage,
+        margin-ratio: margin-ratio
+      }
+    )
+    (ok true)
+  )
+)
